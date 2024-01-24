@@ -11,49 +11,71 @@ function bundleHTML() {
   fs.rm(destDir, { recursive: true, force: true }, (error) => {
     if (error) {
       console.error('Error deleting the folder:', error);
-    } else {
-      fs.mkdir(destDir, (error) => {
+      exit(1);
+    }
+
+    fs.mkdir(destDir, (error) => {
+      if (error) {
+        console.error(`Error: ${error.message}`);
+        exit(1);
+      }
+
+      bundleCSS();
+      copyAssets();
+
+      const templateFile = path.join(__dirname, 'template.html');
+      fs.readFile(templateFile, 'utf-8', (error, templateContent) => {
         if (error) {
           console.error(`Error: ${error.message}`);
           exit(1);
         }
-        bundleCSS();
-        copyAssets();
-        const templateFile = path.join(__dirname, 'template.html');
-        fs.readFile(templateFile, 'utf-8', (error, templateContent) => {
-          if (error) {
-            console.error(`Error: ${error.message}`);
-            exit(1);
-          }
 
-          const tags = templateContent.match(/{{(.*?)}}/g) || [];
-          const componentsDir = path.join(__dirname, 'components');
-          const replacedContent = tags.reduce((content, tag) => {
+        const tags = templateContent.match(/{{(.*?)}}/g) || [];
+        const componentsDir = path.join(__dirname, 'components');
+        let replacedContent = templateContent;
+        replaceTags(0);
+
+        function replaceTags(index) {
+          if (index < tags.length) {
+            const tag = tags[index];
             const componentName = tag.slice(2, -2).trim();
             const componentFile = path.join(
               componentsDir,
               `${componentName}.html`,
             );
 
-            if (fs.existsSync(componentFile)) {
-              const componentContent = fs.readFileSync(componentFile, 'utf-8');
-              content = content.replace(tag, componentContent);
-            }
-
-            return content;
-          }, templateContent);
-
-          const indexFile = path.join(destDir, 'index.html');
-          fs.writeFile(indexFile, replacedContent, (error) => {
-            if (error) {
-              console.error(`Error writing html file: ${error.message}`);
-              exit(1);
-            }
-            stdout.write('The index.html is in project-dist directory.\n');
-          });
-        });
+            fs.access(componentFile, (error) => {
+              if (!error) {
+                fs.readFile(
+                  componentFile,
+                  'utf-8',
+                  (error, componentContent) => {
+                    if (!error) {
+                      replacedContent = replacedContent.replace(
+                        tag,
+                        componentContent,
+                      );
+                    }
+                    replaceTags(index + 1);
+                  },
+                );
+              } else {
+                replaceTags(index + 1);
+              }
+            });
+          } else {
+            const indexFile = path.join(destDir, 'index.html');
+            fs.writeFile(indexFile, replacedContent, (error) => {
+              if (error) {
+                console.error(`Error writing html file: ${error.message}`);
+                exit(1);
+              }
+              stdout.write('The index.html is in project-dist directory.\n');
+            });
+          }
+        }
       });
-    }
+    });
   });
 }
 
